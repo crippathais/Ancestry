@@ -1,0 +1,146 @@
+---
+title: "Local ancestry deviations in Brazilian samples"
+author: "Thais Crippa"
+date: "July 19th, 2022"
+output:
+  html_document:
+    code_folding: hide
+    keep_md: yes
+    number_section: yes
+    toc: yes
+    toc_depth: 4
+  toc_float:
+      collapsed: no
+always_allow_html: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1 Install and load packages
+
+```{r install.packages, eval=F,include=FALSE}
+
+# define packages
+pkgs<-c("knitr","ggplot2","plotly","car")
+
+# install packages
+uninstalled.packages<-setdiff(pkgs,rownames(installed.packages()))
+if(length(uninstalled.packages)>0){BiocManager::install(uninstalled.packages)}
+```
+
+Load the packages in the software
+```{r loading packages}
+res <- sapply(pkgs, require, character.only=TRUE)
+```
+
+Configure the paste that all data and results will be available 
+```{r set.directory}
+setwd("/home/thais/Postdoc/GitHub/ancestry/")
+```
+
+
+# 2 Filtering by SNPs
+
+``` {r}
+geno.filter<-function(prefixfile){
+  # read SNP information from PLINK to R
+  bsp.aut<-read.table(paste0(prefixfile,'.bim'))
+  # extract the two alleles
+  bsp.aut$gen<-paste0(bsp.aut$V5,bsp.aut$V6)
+  # create a vector with 4 possible combination of ambiguous SNPs
+  transitions<-c("GC","CG","AT","TA")
+  # extract ambiguous SNPs based on the vector created above
+  ambiguous.SNPs<-droplevels(subset(bsp.aut,bsp.aut$gen %in% transitions))
+  # create a file containing the SNP name from the ambiguous SNPs
+  write.table(as.matrix(ambiguous.SNPs$V2),file='ambiguous_var.txt',quote=F,row.names=F,col.names=F)
+  system(paste0("plink --bfile ",prefixfile," --autosome --exclude ambiguous_var.txt --allow-extra-chr --make-bed --out ",prefixfile,"_QC"))
+}
+
+geno.filter("hg38")
+
+#extract variants for overlap
+extract.variants<-function(input.bed){
+  system(paste0('plink --bfile ',input.bed,' --allow-extra-chr --write-snplist --out ',input.bed))
+  
+  variants<-read.table(paste0(input.bed,'.snplist'))
+  return(as.character(variants$V1))
+}
+
+bipmed.plink.var<-extract.variants("hg38_QC")
+```
+
+Remove ambigous SNPs, HWE p-value < 0.000001 (parameters used by the ENIGMA2 cookbook for imputation), and non-autosomal SNPs. We removed variants with missing data > 0.1 and individuals with missing data > 1.96SD from the missing data mean (0.21)
+
+```{r}
+prefixfile<-"hg38"
+
+# read SNP information from PLINK to R
+bsp.aut<-read.table(paste0(prefixfile,'.bim'))
+# extract the two alleles
+bsp.aut$gen<-paste0(bsp.aut$V5,bsp.aut$V6)
+# create a vector with 4 possible combination of ambiguous SNPs
+transitions<-c("GC","CG","AT","TA")
+# extract ambiguous SNPs based on the vector created above
+ambiguous.SNPs<-droplevels(subset(bsp.aut,bsp.aut$gen %in% transitions))
+# create a file containing the SNP name from the ambiguous SNPs
+write.table(as.matrix(ambiguous.SNPs$V2),file='ambiguous_var.txt',quote=F,row.names=F,col.names=F)
+````
+
+``` {r}
+# do genotype filtering
+system(paste0('plink --bfile ',prefixname,' --autosome  --hwe 0.000001 --geno 0.1 --mind 0.21  --exclude ambiguous_var.txt --allow-extra-chr --make-bed --out',prefixname,'_QC'))
+
+```
+
+
+# Filtering by Samples
+We evaluate the heterozygosity rate (amount of heterozygous SNPs in the genome) for each sample, in order to search for endogamic sample (Low heterozygosity rates), or technical problems, such as sample contamination (high heterozygosity rate). In this case, we remove sample who presented heterozigosity rate with more or less than three standard deviations from the mean.
+
+```{r}
+prefixname<-"hg38_QC"
+# estimate heterozygosity from each sample by PLINK.
+system(paste0('plink --bfile ',prefixname,' --out ',prefixname,' --het'))
+
+# read heterozygosity file from PLINK to R software
+het<-read.table(paste0(prefixname,'.het'),header=T)
+
+# estimates heterozygosity rate from each individual
+het$het.rate<-round((het$N.NM.-het$O.HOM.)/het$N.NM.,digits=3)
+
+# estimates mean and standard deviation
+het.rate.mean<-mean(het$het.rate)
+het.rate.sd<-sd(het$het.rate)
+
+# estimates 3 standard deviation range from mean
+het.rate.higher<-het.rate.mean+(3*het.rate.sd)
+het.rate.lower<-het.rate.mean-(3*het.rate.sd)
+
+#if you want, plot heterozigozity rate
+ggplot(data=het,aes(x=FID,y=het.rate))+geom_boxplot(outlier.color = NA)+geom_jitter(width=0.2,alpha=0.9)+theme_light(base_size = 15)+xlab("")+ylab("Heterozygosity rate")
+ggsave("het.png")
+
+# create a list of individuals with 3 standard deviations
+remove_het<-droplevels(subset(het,het$het.rate > het.rate.higher | het$het.rate < het.rate.lower))
+
+# create a file from the list
+write.table(remove_het[,c(1,2)],file=paste0(prefixname,'_remove_het.txt'),quote = F,row.names = F,col.names = F)
+
+# remove heterozygosity rate outliers by PLINK
+system(paste0('plink --bfile ',prefixname,' --remove  ',prefixname,'_remove_het.txt --make-bed --out ',prefixname,'_het'))
+
+# remove related individuals
+## Remove samples based on GRM matrix
+system(paste0('plink --bfile ',prefixname,'_het --rel-cutoff 0.125 --make-bed --out ',prefixname,'_het_rel'))
+
+# view number of individuals and genotypes after filtering
+hg38.fam<-read.table("hg38_QC_het_rel.fam")
+hg38.bim<-read.table("hg38_QC_het_rel.bim")
+as.matrix(table(hg38.fam$V1))
+nrow(hg38.fam)
+print(paste0(nrow(hg38.bim)," variants"))
+
+````
