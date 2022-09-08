@@ -6,6 +6,7 @@ VCF="/home/thais/raw/array/liftover/snparrayTotal_Filter.vcf.gz"
 # 1.2 Filtering by Genotypes and Samples
 # 1.3 Creating 1KGP SNP list -- if snparray or exomes as input 
 # 1.4 Merging with 1000 Genome Project
+# 1.4 - part 2 Merging with Natives from Brazil
 # 1.5 Filtering with 1KGP
 # 1.6 Evaluating population structure by Principal Component analysis (PCA)
 # 2 Haplotype phasing by SHAPEIT4
@@ -107,18 +108,68 @@ plink --bfile ThousandGenomeForHg38_extract --write-snplist --out ThousandGenome
 plink --bfile hg38_QC_het_rel_2 --extract ThousandGenomes_extract.snplist --make-bed --out hg38_QC_het_rel_extract
 
 # merge our sample with 1000genomes data
-plink --bfile hg38_QC_het_rel_extract --bmerge ThousandGenomeForHg38_extract --allow-no-sex --make-bed --out alldatahg381KGP
+plink --bfile hg38_QC_het_rel_extract --bmerge ThousandGenomeForHg38_extract --allow-no-sex --make-bed --out alldatahg38_1KGP
 
 # If still appears some SNPs (often two or three), remove them from our sample and from 1000 genome data
-# plink --bfile hg38_QC_het_rel_flip --exclude alldatahg381KGP-merge.missnp --make-bed --out hg38_QC_het_rel_exclude
+# plink --bfile hg38_QC_het_rel_flip --exclude alldatahg38_1KGP-merge.missnp --make-bed --out hg38_QC_het_rel_exclude
 
 # plink --bfile ThousandGenomeForHg38_extract --exclude alldata1KGP-merge.missnp --make-bed --out ThousandGenomeForHg38_exclude
 
 # # merge again
-# plink --bfile hg38_QC_het_rel_exclude --bmerge ThousandGenomeForHg38_exclude --make-bed --out alldatahg381KGP
+# plink --bfile hg38_QC_het_rel_exclude --bmerge ThousandGenomeForHg38_exclude --make-bed --out alldatahg38_1KGP
 
 echo "It's worked"
 
+###################################
+# 1.4 - part 2 Merging with Natives from Brazil
+###################################
+
+#Usinf snplist from step 1.4
+
+NATIVES="/home/thais/raw/Natives/tupiniquim_guarani_Axiom_InCor_BB"
+NAME="natives"
+
+# Bed to VCF file and change id's
+plink --bfile ${NATIVES} --double-id --allow-no-sex --recode vcf --out ${NAME}
+#change to fiz max-alleles=2
+vcftools --vcf ${NAME}.vcf --min-alleles 1 --max-alleles 2 --recode --recode-INFO-all --out ${NAME}
+# Remove lines that contain "-""
+grep -v  "-" natives.recode.vcf > natives_2.recode.vcf
+
+#Liftover Natives Dataset : hg19 to hg38
+java -Xms150g -jar /home/thais/Pharmaco/ancestry/array/scripts/picard.jar LiftoverVcf \
+I=natives_2.recode.vcf \
+O=/home/thais/Pharmaco/ancestry/array/${NAME}.hg19toHg38.vcf \
+CHAIN=/home/nfs/ref/Liftover_Chain_Files/b37ToHg38.over.chain \
+REJECT=/home/thais/Pharmaco/ancestry/array/${NAME}.hg19toHg38.reject.vcf \
+R=/home/nfs/ref/hg38/Homo_sapiens_assembly38.fasta  \
+MAX_RECORDS_IN_RAM=40000
+
+#Processed 176003 variants.
+#88 variants failed to liftover.
+#542 variants lifted over but had mismatching reference alleles after lift over.
+#0.3579% of variants were not successfully lifted over and written to the output.
+#### Has Y
+
+NATIVE="/home/thais/Pharmaco/ancestry/array/BRA/natives.hg19toHg38.vcf"
+
+# Changes id's
+plink2 --vcf ${NATIVE} --allow-extra-chr --double-id --new-id-max-allele-len 2 missing --set-all-var-ids @:#:\$1:\$2 --make-bed --out Natives
+
+# extract the SNPs from Natives Genome data
+plink --bfile Natives --allow-extra-chr --double-id --extract /home/thais/Pharmaco/ancestry/array/PER/hg38_QC_het_rel_2.snplist --make-bed --out NativesForHg38_extract
+
+# create a list of SNPs from Natives Genome data to overlap exactly the same SNPs from our sample
+plink --bfile NativesForHg38_extract --allow-extra-chr --double-id --write-snplist --out Natives_extract
+
+# extract the Natives Genome data SNPs from our sample
+plink --bfile /home/thais/Pharmaco/ancestry/array/PER/hg38_QC_het_rel_2 --allow-extra-chr --double-id --extract Natives_extract.snplist --make-bed --out hg38_QC_het_rel_extract_natives
+
+# merge our sample with Natives Genome data
+plink --bfile hg38_QC_het_rel_extract_natives --allow-extra-chr --double-id --bmerge NativesForHg38_extract --allow-no-sex --make-bed --out NativesHg38_extractMerge
+
+#### Merging Natives with 1KGP + all snparrays
+plink --bfile  /home/thais/Pharmaco/ancestry/array/PER/alldatahg381KGP --bmerge NativesHg38_extractMerge --allow-extra-chr --double-id --allow-no-sex --make-bed --out alldatahg38_1KGP_natives
 
 ###################################
 # 1.5 Filtering with 1KGP
@@ -127,50 +178,57 @@ echo "It's worked"
 # Before estimate the Principal Components (PCs) from the total sample, we need to prune SNPs with Linkage Disequilibrium (LD), in order to avoid bias in PCs due to close SNPs with same frequency. We used the following parameters for pruning: window size=50 SNPs, shift step=5 SNPs, and r2=0.5.
 
 # exclude variants with AF<0.01
-plink --bfile alldatahg381KGP --maf 0.01 --make-bed --out alldatahg381KGP_MAF
+plink --bfile alldatahg38_1KGP_natives --maf 0.01 --make-bed --out alldatahg38_1KGP_natives_MAF
 
 # pruning SNPs by LD
-plink --bfile alldatahg381KGP_MAF --out alldatahg381KGP_MAF_LD --indep-pairwise 50 5 0.5
+plink --bfile alldatahg38_1KGP_natives_MAF --out alldatahg38_1KGP_natives_MAF_LD --indep-pairwise 50 5 0.5
   
 # mantain pruned SNPs only and allele frequencies > 0.01
-plink --bfile alldatahg381KGP_MAF --extract alldatahg381KGP_MAF_LD.prune.in --make-bed --out alldatahg381KGP_MAF_LD
-
+plink --bfile alldatahg38_1KGP_natives_MAF --extract alldatahg38_1KGP_natives_MAF_LD.prune.in --make-bed --out alldatahg38_1KGP_natives_MAF_LD
 
 #Relatedness among samples is analyzed by estimating the proportion of identical-by-descent (IBD) alleles between pairs of individuals by $\hat{pi}$ and relatedness matrix (GRM) estimations. In this context, it is expected that third-degree relatives have values of $\hat{pi}$ or GRM = 0.125. Therefore, pairs of samples with $\hat{pi}$ or GRM > 0.125 are removed from the data.
 # The expectation is that IBD = 1 for duplicates or monozygotic twins, IBD = 0.5 for first-degree relatives, IBD = 0.25 for second-degree relatives and IBD = 0.125 for third-degree relatives. Due to genotyping error, LD and population structure there is often some variation around these theoretical values and it is typical to remove one individual from each pair with an IBD > 0.1875, which is halfway between the expected IBD for third- and second-degree relatives. For these same reasons an IBD > 0.98 identifies duplicates.
 
 # estimates IBD from the sample by PLINK
-plink --bfile alldatahg381KGP_MAF_LD --allow-extra-chr --allow-no-sex --genome --out alldatahg381KGP_MAF_LD_temp
+plink --bfile alldatahg38_1KGP_natives_MAF_LD --allow-extra-chr --allow-no-sex --genome --out alldatahg38_1KGP_natives_MAF_LD_temp
 
 #Estimate Missigness
-plink --bfile alldatahg381KGP_MAF_LD --missing --out alldatahg381KGP_MAF_LD_temp.Miss
+plink --bfile alldatahg38_1KGP_natives_MAF_LD --missing --out alldatahg38_1KGP_natives_MAF_LD_temp.Miss
 
-cp alldatahg381KGP_MAF_LD_temp.genome test.genome
-cp alldatahg381KGP_MAF_LD_temp.Miss.imiss test.imiss
+cp alldatahg38_1KGP_natives_MAF_LD_temp.genome test.genome
+cp alldatahg38_1KGP_natives_MAF_LD_temp.Miss.imiss test.imiss
 
 # Run to identify all pairs of individuals with IBD > 0.125
 # change directories, if necessary, in perl script
-perl /home/thais/Pharmaco/ancestry/array/scripts/run-IBD-QC.pl test
+perl /home/thais/Pharmaco/ancestry/array/BRA/scripts/run-IBD-QC.pl test
 
-plink --bfile alldatahg381KGP_MAF_LD --double-id --biallelic-only strict --allow-extra-chr --allow-no-sex --remove /home/thais/Pharmaco/ancestry/array/ibd/fail-IBD-QC.txt --make-bed --out alldatahg381KGP_MAF_LD_IBD
+plink --bfile alldatahg38_1KGP_natives_MAF_LD --double-id --biallelic-only strict --allow-extra-chr --allow-no-sex --remove /home/thais/Pharmaco/ancestry/array/BRA/ibd/fail-IBD-QC.txt --make-bed --out alldatahg38_1KGP_natives_MAF_LD_IBD
+
+plink --bfile alldatahg38_1KGP_natives_MAF_LD_IBD --double-id --biallelic-only strict --allow-extra-chr --allow-no-sex --keep 1kgp_Natives_BRA.txt --make-bed --out alldatahg38_1KGP_natives_MAF_LD_IBD_BRA
 
 mv test* ibd/
-rm alldatahg381KGP_MAF_LD_temp*
+rm alldatahg38_1KGP_natives_MAF_LD_temp*
 
 
 ###################################
-# 1.6 Evaluating population structure by Principal Component analysis (PCA)
+# 1.6 Evaluating population structure 
+# PCA
+# ADMIXTURE
+# FST
+# AMOVA
+# F4
 ###################################
 
-# estimates PCs
-plink --bfile alldatahg381KGP_MAF_LD_IBD --pca 3333 header --allow-no-sex --out alldatahg381KGP_MAF_LD_IBD
+###
+# PCA
+###
 
-# # BRA only
-# plink --bfile alldatahg381KGP_MAF_LD --pca 3333 header --remove-fam 1kgp.fam --allow-no-sex --out alldatahg38_MAF_LD
+# estimates PCs Total
+plink --bfile alldatahg38_1KGP_natives_MAF_LD_IBD_BRA --pca 3333 header --allow-no-sex --out alldatahg38_1KGP_natives_MAF_LD_IBD_BRA
 
 # extract the 10 first PCs
-cut -d ' ' -f 1-12 alldatahg381KGP_MAF_LD_IBD.eigenvec > temp.eigenvec
-mv temp.eigenvec alldatahg381KGP_MAF_LD_IBD.eigenvec
+cut -d ' ' -f 1-12 alldatahg38_1KGP_natives_MAF_LD_IBD_BRA.eigenvec > temp.eigenvec
+mv temp.eigenvec alldatahg38_1KGP_natives_MAF_LD_IBD_BRA.eigenvec
 
 # cut -d ' ' -f 1-12 alldatahg38_MAF_LD.eigenvec > temp.eigenvec
 # mv temp.eigenvec alldatahg38_MAF_LD.eigenvec
@@ -179,16 +237,71 @@ mv temp.eigenvec alldatahg381KGP_MAF_LD_IBD.eigenvec
 
 R CMD PlotPCA.R
 
+###
+# ADMIXTURE
+###
+
+# Running ADMIXTURE
+for K in 1 2 3 4 5 6 7 8; \
+do ~/Pharmaco/ancestry/array/BRA/popGenomic/scripts/dist/admixture_linux-1.3.0/admixture -B1000 --cv ../alldatahg38_1KGP_natives_MAF_LD_IBD_BRA.bed $K  | tee log${K}.out; done
+
+## Seeing the best k for the population
+grep -h CV log*.out
+
+## Make a graph in R
+R CMD PlotAdmix.R
+
+###
+# FST
+###
+
+bcftools query -l alldatahg38_1KGP_natives_MAF_LD_IBD_BRA.vcf > samplesTotal.txt
+
+grep "^BRA" samplesTotal.txt > BRA.txt
+grep "^NAT_BRA" samplesTotal.txt > NAT_BRA.txt
+grep "^EUR" samplesTotal.txt > EUR.txt
+grep "^AFR" samplesTotal.txt > AFR.txt
+grep "^NAT_PER" samplesTotal.txt > NAT_PER.txt
+grep "^SAS" samplesTotal.txt > SAS.txt
+grep "^EAS" samplesTotal.txt > EAS.txt
+grep "^AMR" samplesTotal.txt > AMR.txt
+
+rm samplesTotal.txt
+
+for m in *.txt ; do \
+for s in *.txt; do \
+vcftools --vcf ../alldatahg38_1KGP_natives_MAF_LD_IBD_BRA.vcf --weir-fst-pop ${m} --weir-fst-pop ${s} --out ${m}_${s}
+done
+done
+
+## Mean FST values
+grep "Weir and Cockerham mean Fst estimate:" *.log > fst.txt
+
+###
+# AMOVA
+###
+
+###
+# F4
+###
+
+
+
+
+
+
+
+
 ###################################
 # 2 Haplotype phasing by SHAPEIT4
 ###################################
 
 # Input files
 # It's imperative to know that for shapeit we do not use the LD and IBD filters
-plink="/home/thais/Pharmaco/ancestry/array/alldatahg381KGP_MAF"
+plink="/home/thais/Pharmaco/ancestry/array/BRA/alldatahg38_1KGP_natives_MAF"
 ref="/home/thais/Pharmaco/ref/1KGP_phase3_hg38/1kGP_high_coverage_Illumina"
-mapfile="/home/thais/Pharmaco/ancestry/array/shapeit/geneticmap"
-data="hg38SNP"
+mapfile="/home/thais/Pharmaco/ancestry/array/BRA/shapeit/geneticmap"
+data="/home/thais/Pharmaco/ancestry/array/BRA/shapeit/hg38SNP"
 
 # Split data by chromossome and extracting only our data from merged file
 # Create VCF files, compress and index
@@ -250,6 +363,7 @@ for chr in {13..18}; do \
     --log  ${data}.chr${chr}.phased.log;
 done
 
+# Using Shapeit4
 for chr in {19..22}; do \
    /bin/shapeit4-4.2.2/bin/shapeit4.2 \
     -I ${plink}_chr${chr}_split.vcf.gz \
@@ -267,28 +381,51 @@ done
 
 ################ Query and reference panel files
 # Creating query file an reference panel: VCF with all chromossomes -- indexed with bcftools
-bcftools concat ${data}.chr1.phased.vcf.gz ${data}.chr2.phased.vcf.gz ${data}.chr3.phased.vcf.gz ${data}.chr4.phased.vcf.gz ${data}.chr5.phased.vcf.gz ${data}.chr6.phased.vcf.gz ${data}.chr7.phased.vcf.gz ${data}.chr8.phased.vcf.gz ${data}.chr9.phased.vcf.gz ${data}.chr10.phased.vcf.gz ${data}.chr11.phased.vcf.gz ${data}.chr12.phased.vcf.gz ${data}.chr13.phased.vcf.gz ${data}.chr14.phased.vcf.gz ${data}.chr15.phased.vcf.gz ${data}.chr16.phased.vcf.gz ${data}.chr17.phased.vcf.gz ${data}.chr18.phased.vcf.gz ${data}.chr19.phased.vcf.gz ${data}.chr20.phased.vcf.gz ${data}.chr21.phased.vcf.gz ${data}.chr22.phased.vcf.gz -Oz -o allhg381kGP_mergeChr.vcf.gz
+bcftools concat ${data}.chr1.phased.vcf.gz ${data}.chr2.phased.vcf.gz ${data}.chr3.phased.vcf.gz ${data}.chr4.phased.vcf.gz ${data}.chr5.phased.vcf.gz ${data}.chr6.phased.vcf.gz ${data}.chr7.phased.vcf.gz ${data}.chr8.phased.vcf.gz ${data}.chr9.phased.vcf.gz ${data}.chr10.phased.vcf.gz ${data}.chr11.phased.vcf.gz ${data}.chr12.phased.vcf.gz ${data}.chr13.phased.vcf.gz ${data}.chr14.phased.vcf.gz ${data}.chr15.phased.vcf.gz ${data}.chr16.phased.vcf.gz ${data}.chr17.phased.vcf.gz ${data}.chr18.phased.vcf.gz ${data}.chr19.phased.vcf.gz ${data}.chr20.phased.vcf.gz ${data}.chr21.phased.vcf.gz ${data}.chr22.phased.vcf.gz -Oz -o allhg381kGPNatives_mergeChr.vcf.gz
+
+MERGE="allhg381kGPNatives_mergeChr.vcf.gz"
+
+#verify if all the chrms are present, and in order
+zgrep -v "#" allhg381kGPNatives_mergeChr.vcf.gz | cut -f1 | uniq
+#verify if all snps
+bcftools view -H ${MERGE} | awk '{print $3}' | wc -l
 
 # Creating sample list from merge Chr with all individuals
-bcftools query -l allhg381kGP_mergeChr.vcf.gz > samplesQueryRef.txt
+bcftools query -l ${MERGE} > samplesQueryRef.txt
 
 # Creating sample and ref lists
-samplesQUERY=samplesQuery.txt
+grep '^0' samplesQueryRef.txt > samplesQuery.txt
+grep -v '^0' samplesQueryRef.txt > samplesREF.txt
+
+samplesQUERY=samplesQuery_BRA.txt
 samplesREF=samplesREF.txt
 
-# Creating two VCFs: query VCF and reference panel VCF
-vcftools --gzvcf allhg381kGP_mergeChr.vcf.gz --keep ${samplesQUERY} --recode --recode-INFO-all --out query_hg38_mergeChr
-
-vcftools --gzvcf allhg381kGP_mergeChr.vcf.gz --keep ${samplesREF} --recode --recode-INFO-all --out query_hg38_mergeChr
+###### Creating query VCF 
+vcftools --gzvcf ${MERGE} --keep ${samplesQUERY} --recode --recode-INFO-all --out query_hg38_mergeChr
 
 # Index
 bgzip query_hg38_mergeChr.recode.vcf
 bcftools index query_hg38_mergeChr.recode.vcf.gz
-bgzip query_hg38_mergeChr.recode.vcf
-bcftools index query_hg38_mergeChr.recode.vcf.gz
 
-# Creating sample file from reference panel: sample name \t population
+###### Creating sample file from reference panel: sample name \t population
 # Using $sampleREF
+awk -F'_' '{print $2 "\t" $1}' ${samplesREF} > samplefile_temp.txt
+
+# Create sample file only with AFR, EUR and AMR (PERU - Nativos)
+# Part did on excel
+
+## Create samplefile with the correct names 
+awk '{print $2"_"$1 "\t" $2}' samplefile_temp2.txt | sed 's/NAT/AMR/' > samplefile_temp3.txt
+
+awk '{print $1}' samplefile_temp3.txt > samplesREF_2.txt
+
+###### Creating reference panel VCF
+samplesREF=samplesREF_2.txt
+vcftools --gzvcf ${MERGE} --keep ${samplesREF} --recode --recode-INFO-all --out Ref_hg38_mergeChr
+
+#Compress and index
+bgzip Ref_hg38_mergeChr.recode.vcf
+bcftools index Ref_hg38_mergeChr.recode.vcf.gz
 
 ################ Gene map file
 # Creating map file: VCF with all chromossomes -- indexed with bcftools
@@ -297,24 +434,154 @@ zcat chr1.b38.gmap.gz chr2.b38.gmap.gz chr3.b38.gmap.gz chr4.b38.gmap.gz chr5.b3
 #Chr \t pos \t cM
 awk '{print $2 "\t" $1 "\t" $3}' hg38.gmap > hg38_2.gmap
 
-#Compress
-bgzip hg38_2.gmap
+#Do not compress gmap
 
 ################ RfMix
 
-QUERY= #VCF with all chrs
-REF= #VCF reference
-MAP= #genetic map
-SAMPLE= #sample map
+QUERY="/home/thais/Pharmaco/ancestry/array/BRA/shapeit/query_hg38_mergeChr.recode.vcf.gz" #VCF with all chrs
+#Ref with NAT from BRA
+REF="/home/thais/Pharmaco/ancestry/array/BRA/shapeit/Ref_hg38_mergeChr.recode.vcf.gz" #VCF reference
+MAP="/home/thais/Pharmaco/ancestry/array/BRA/shapeit/geneticmap/hg38_2.gmap" #genetic map
+SAMPLE="/home/thais/Pharmaco/ancestry/array/BRA/shapeit/samplefile_temp3.txt" #sample map
 
 ## Run RfMix
-for chr in {1..22}; do
+
+### BRA
+for chr in {1..22}
+do
 /home/thais/bin/rfmix/rfmix \
 -f ${QUERY} \
 -r ${REF} \
 -m ${SAMPLE} \
 -g ${MAP} \
--o allhg38 \
---n-threads 6 \
---chromosome=${chr};
+-o /home/thais/Pharmaco/ancestry/array/BRA/shapeit/RFMix/BRA_allhg38_rfmix_${chr} \
+--n-threads=12 \
+--chromosome=${chr}
 done
+
+
+### BRA - RR
+for chr in {1..22}
+do
+/home/thais/bin/rfmix/rfmix \
+-f ${QUERY} \
+-r ${REF} \
+-m ${SAMPLE} \
+-g ${MAP} \
+-o /home/thais/Pharmaco/ancestry/array/BRA/shapeit/RFMix/reanalyze-ref/BRA_allhg38_rfmix_RR_${chr} \
+--n-threads=12 \
+--chromosome=${chr} \
+--reanalyze-reference
+done
+
+#VCF with all chrs
+QUERY="/home/thais/Pharmaco/ancestry/array/BRA/shapeit/query_hg38_mergeChr.recode.vcf.gz" 
+#Ref with NAT from PER
+REF="/home/thais/Pharmaco/ancestry/array/PER/shapeit/Ref_hg38_mergeChr.recode.vcf.gz" #VCF reference
+MAP="/home/thais/Pharmaco/ancestry/array/BRA/shapeit/geneticmap/hg38_2.gmap" #genetic map
+SAMPLE="/home/thais/Pharmaco/ancestry/array/PER/shapeit/samplefile_temp3.txt" #sample map
+
+
+### PER
+for chr in {1..22}
+do
+/home/thais/bin/rfmix/rfmix \
+-f ${QUERY} \
+-r ${REF} \
+-m ${SAMPLE} \
+-g ${MAP} \
+-o /home/thais/Pharmaco/ancestry/array/PER/shapeit/RFMix/PER_allhg38_rfmix_${chr} \
+--n-threads=12 \
+--chromosome=${chr}
+done
+
+
+### PER - RR
+for chr in {1..22}
+do
+/home/thais/bin/rfmix/rfmix \
+-f ${QUERY} \
+-r ${REF} \
+-m ${SAMPLE} \
+-g ${MAP} \
+-o /home/thais/Pharmaco/ancestry/array/PER/shapeit/RFMix/reanalyze-ref/PER_allhg38_rfmix_RR_${chr} \
+--n-threads=12 \
+--chromosome=${chr} \
+--reanalyze-reference
+done
+
+for m in BRA PER
+do
+grep "#" ${m}_allhg38_rfmix_1.sis.tsv > header.sis.tsv
+cat ${m}_allhg38_rfmix_*.sis.tsv | grep -v "#" > ${m}_allhg38_rfmix_total.sis.tsv
+cat header.sis.tsv ${m}_allhg38_rfmix_total.sis.tsv | sort -k1 -n > ${m}_allhg38_rfmix_total_h.sis.tsv
+
+awk 'NR==2' ${m}_allhg38_rfmix_1.fb.tsv > header.fb.tsv
+cat ${m}_allhg38_rfmix_*.fb.tsv | grep -v "chromosome" | grep -v "#" > ${m}_allhg38_rfmix_total.fb.tsv
+cat header.fb.tsv ${m}_allhg38_rfmix_total.fb.tsv | sort -k1 -n > ${m}_allhg38_rfmix_total_h.fb.tsv
+
+grep "#" ${m}_allhg38_rfmix_1.msp.tsv > header.msp.tsv
+cat ${m}_allhg38_rfmix_*.msp.tsv | grep -v "#" > ${m}_allhg38_rfmix_total.msp.tsv
+cat header.msp.tsv ${m}_allhg38_rfmix_total.msp.tsv | sort -k1 -n > ${m}_allhg38_rfmix_total_h.msp.tsv
+
+grep "#" ${m}_allhg38_rfmix_1.rfmix.Q > header.rfmix.Q
+cat ${m}_allhg38_rfmix_*.rfmix.Q | grep -v "#" > ${m}_allhg38_rfmix_total.rfmix.Q
+cat header.rfmix.Q ${m}_allhg38_rfmix_total.rfmix.Q | sort -k1 -n  > ${m}_allhg38_rfmix_total_h.rfmix.Q
+done
+
+### BRA_RR
+
+grep "#" BRA_allhg38_rfmix_RR_1.sis.tsv > header.sis.tsv
+cat BRA_allhg38_rfmix_RR_*.sis.tsv | grep -v "#" > BRA_allhg38_rfmix_RR_total.sis.tsv
+cat header.sis.tsv BRA_allhg38_rfmix_RR_total.sis.tsv | sort -k1 -n > BRA_allhg38_rfmix_RR_total_h.sis.tsv
+
+awk 'NR==2' BRA_allhg38_rfmix_RR_1.fb.tsv > header.fb.tsv
+cat BRA_allhg38_rfmix_RR_*.fb.tsv | grep -v "chromosome" | grep -v "#" > BRA_allhg38_rfmix_RR_total.fb.tsv
+cat header.fb.tsv BRA_allhg38_rfmix_RR_total.fb.tsv | sort -k1 -n > BRA_allhg38_rfmix_RR_total_h.fb.tsv
+
+grep "#" BRA_allhg38_rfmix_RR_1.msp.tsv > header.msp.tsv
+cat BRA_allhg38_rfmix_RR_*.msp.tsv | grep -v "#" > BRA_allhg38_rfmix_RR_total.msp.tsv
+cat header.msp.tsv BRA_allhg38_rfmix_RR_total.msp.tsv | sort -k1 -n > BRA_allhg38_rfmix_RR_total_h.msp.tsv
+
+grep "#" BRA_allhg38_rfmix_RR_1.rfmix.Q > header.rfmix.Q
+cat BRA_allhg38_rfmix_RR_*.rfmix.Q | grep -v "#" > BRA_allhg38_rfmix_RR_total.rfmix.Q
+cat header.rfmix.Q BRA_allhg38_rfmix_RR_total.rfmix.Q | sort -k1 -n  > BRA_allhg38_rfmix_RR_total_h.rfmix.Q
+
+
+
+##PER
+grep "#" PER_allhg38_rfmix_1.sis.tsv > header.sis.tsv
+cat PER_allhg38_rfmix_*.sis.tsv | grep -v "#" > PER_allhg38_rfmix_total.sis.tsv
+cat header.sis.tsv PER_allhg38_rfmix_total.sis.tsv | sort -k1 -n > PER_allhg38_rfmix_total_h.sis.tsv
+
+awk 'NR==2' PER_allhg38_rfmix_1.fb.tsv > header.fb.tsv
+cat PER_allhg38_rfmix_*.fb.tsv | grep -v "chromosome" | grep -v "#" > PER_allhg38_rfmix_total.fb.tsv
+cat header.fb.tsv PER_allhg38_rfmix_total.fb.tsv | sort -k1 -n > PER_allhg38_rfmix_total_h.fb.tsv
+
+grep "#" PER_allhg38_rfmix_1.msp.tsv > header.msp.tsv
+cat PER_allhg38_rfmix_*.msp.tsv | grep -v "#" > PER_allhg38_rfmix_total.msp.tsv
+cat header.msp.tsv PER_allhg38_rfmix_total.msp.tsv | sort -k1 -n > PER_allhg38_rfmix_total_h.msp.tsv
+
+grep "#" PER_allhg38_rfmix_1.rfmix.Q > header.rfmix.Q
+cat PER_allhg38_rfmix_*.rfmix.Q | grep -v "#" > PER_allhg38_rfmix_total.rfmix.Q
+cat header.rfmix.Q PER_allhg38_rfmix_total.rfmix.Q | sort -k1 -n  > PER_allhg38_rfmix_total_h.rfmix.Q
+
+### PER_RR
+
+grep "#" PER_allhg38_rfmix_RR_1.sis.tsv > header.sis.tsv
+cat PER_allhg38_rfmix_RR_*.sis.tsv | grep -v "#" > PER_allhg38_rfmix_RR_total.sis.tsv
+cat header.sis.tsv PER_allhg38_rfmix_RR_total.sis.tsv | sort -k1 -n > PER_allhg38_rfmix_RR_total_h.sis.tsv
+
+awk 'NR==2' PER_allhg38_rfmix_RR_1.fb.tsv > header.fb.tsv
+cat PER_allhg38_rfmix_RR_*.fb.tsv | grep -v "chromosome" | grep -v "#" > PER_allhg38_rfmix_RR_total.fb.tsv
+cat header.fb.tsv PER_allhg38_rfmix_RR_total.fb.tsv | sort -k1 -n > PER_allhg38_rfmix_RR_total_h.fb.tsv
+
+grep "#" PER_allhg38_rfmix_RR_1.msp.tsv > header.msp.tsv
+cat PER_allhg38_rfmix_RR_*.msp.tsv | grep -v "#" > PER_allhg38_rfmix_RR_total.msp.tsv
+cat header.msp.tsv PER_allhg38_rfmix_RR_total.msp.tsv | sort -k1 -n > PER_allhg38_rfmix_RR_total_h.msp.tsv
+
+grep "#" PER_allhg38_rfmix_RR_1.rfmix.Q > header.rfmix.Q
+cat PER_allhg38_rfmix_RR_*.rfmix.Q | grep -v "#" > PER_allhg38_rfmix_RR_total.rfmix.Q
+cat header.rfmix.Q PER_allhg38_rfmix_RR_total.rfmix.Q | sort -k1 -n  > PER_allhg38_rfmix_RR_total_h.rfmix.Q
+
+
