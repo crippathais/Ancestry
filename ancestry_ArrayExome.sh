@@ -22,11 +22,10 @@
 #############################################################################
 #############################################################################
 
-#Arrays lab
-VCF="/home/thais/raw/array/liftover/snparrayTotal_Filter.vcf.gz"
-#SABE genome
-VCF="/home/thais/raw/SABE/SABE1172.1a1172.CONCAT.hg38.VQSR-AS_b.PASS.recode.vcf.gz"
 ###################################
+#Pre-step:
+# A Merge Array + WES 
+
 # Steps:
 # 1.1 Preparing Data
 # 1.2 Filtering by Genotypes and Samples
@@ -42,10 +41,36 @@ VCF="/home/thais/raw/SABE/SABE1172.1a1172.CONCAT.hg38.VQSR-AS_b.PASS.recode.vcf.
 
 ###################################
 
+#Pre-step:
+# A Merge Array + WES 
+
+PATH=~/Pharmaco/ancestry/arrayExome/samples
+#Order in the same way both sample files (wes and array)
+#Array
+bcftools view -S namesArray_Reorder.txt arrayBIPMed.recode.vcf > arrayBIPMed_reorder.recode.vcf
+#WES
+bcftools view -S namesWES_cutAfter_Reorder.txt hg38-v5v6_cut.recode.vcf > hg38-v5v6_cut_reorder.recode.vcf
+
+#Change names from array file to match WES file
+bcftools reheader -s namesWES_cutAfter_Reorder.txt -o arrayBIPMed_reorder_NameChange.recode.vcf arrayBIPMed_reorder.recode.vcf
+
+#Change names
+mv hg38-v5v6_cut_reorder.recode.vcf wes.vcf
+mv arrayBIPMed_reorder_NameChange.recode.vcf snp.vcf
+
+#Run Gotenks to merge WES and Array files
+python gotenks.py wes.vcf snp.vcf
+
 
 ###################################
 # 1.1 Preparing Data
 ###################################
+
+#WES+ARRAY
+VCF="/home/thais/Pharmaco/ancestry/arrayExome/samples/gotenks/merge.vcf"
+#SABE genome
+VCF="/home/thais/raw/SABE/SABE1172.1a1172.CONCAT.hg38.VQSR-AS_b.PASS.recode.vcf.gz"
+
 
 # Convert the VCF files to PLINK FILES (BED/BIM/FAM). Here the missing SNP ids are replaced by chromosome and position. 
 
@@ -111,6 +136,7 @@ plink --merge-list 1KGPmergelist.txt --out ThousandGenomeForHg38_2
 
 #remove extract files
 rm thousand_genome_*
+
 
 ###################################
 # 1.4 Merging with 1000 Genome Project
@@ -185,8 +211,10 @@ NATIVE="/home/thais/Pharmaco/ancestry/array/BRA/natives.hg19toHg38.vcf"
 # Changes id's
 plink2 --vcf ${NATIVE} --allow-extra-chr --double-id --new-id-max-allele-len 2 missing --set-all-var-ids @:#:\$1:\$2 --make-bed --out Natives
 
+NATIVE="/home/thais/Pharmaco/ancestry/array/BRA/Natives"
+
 # extract the SNPs from Natives Genome data
-plink --bfile Natives --allow-extra-chr --double-id --extract hg38_QC_het_rel_2.snplist --make-bed --out NativesForHg38_extract
+plink --bfile ${NATIVE} --allow-extra-chr --double-id --extract hg38_QC_het_rel_2.snplist --make-bed --out NativesForHg38_extract
 
 # create a list of SNPs from Natives Genome data to overlap exactly the same SNPs from our sample
 plink --bfile NativesForHg38_extract --allow-extra-chr --double-id --write-snplist --out Natives_extract
@@ -194,11 +222,28 @@ plink --bfile NativesForHg38_extract --allow-extra-chr --double-id --write-snpli
 # extract the Natives Genome data SNPs from our sample
 plink --bfile hg38_QC_het_rel_2 --allow-extra-chr --double-id --extract Natives_extract.snplist --make-bed --out hg38_QC_het_rel_extract_natives
 
-# merge our sample with Natives Genome data
+# merge our sample+1kgp with Natives Genome data
 plink --bfile hg38_QC_het_rel_extract_natives --allow-extra-chr --double-id --bmerge NativesForHg38_extract --allow-no-sex --make-bed --out NativesHg38_extractMerge
 
 #### Merging Natives with 1KGP + all snparrays
 plink --bfile alldatahg38_1KGP --bmerge NativesHg38_extractMerge --allow-extra-chr --double-id --allow-no-sex --make-bed --out alldatahg38_1KGP_natives
+
+###################################
+# 1.4 - part 3 Merging with SABE database from Brazil
+###################################
+
+# extract the SNPs from SABE Genome data
+plink --bfile /home/thais/Pharmaco/ancestry/genome/SABE/hg38_QC_het_rel_2 --extract hg38_QC_het_rel_2.snplist --make-bed --out alldatahg38_1KGP_natives_SABE
+
+# create a list of SNPs from SABE to overlap exactly the same SNPs from our sample+1kGP+natives
+plink --bfile alldatahg38_1KGP_natives_SABE --write-snplist --out alldatahg38_1KGP_natives_SABE_extract
+
+# extract the SABE genome SNPs from our sample
+plink --bfile hg38_QC_het_rel_2 --extract alldatahg38_1KGP_natives_SABE_extract.snplist --make-bed --out hg38_QC_het_rel_SABE_extract
+
+# merge our sample with 1000genomes data
+plink --bfile hg38_QC_het_rel_SABE_extract --bmerge alldatahg38_1KGP_natives --allow-no-sex --make-bed --out array_SABE_1KPG_Natives
+
 
 ###################################
 # 1.5 Filtering with 1KGP
@@ -207,37 +252,41 @@ plink --bfile alldatahg38_1KGP --bmerge NativesHg38_extractMerge --allow-extra-c
 # Before estimate the Principal Components (PCs) from the total sample, we need to prune SNPs with Linkage Disequilibrium (LD), in order to avoid bias in PCs due to close SNPs with same frequency. We used the following parameters for pruning: window size=50 SNPs, shift step=5 SNPs, and r2=0.5.
 
 # exclude variants with AF<0.01
-plink --bfile alldatahg38_1KGP_natives --maf 0.01 --make-bed --out alldatahg38_1KGP_natives_MAF
+plink --bfile array_SABE_1KPG_Natives --maf 0.01 --make-bed --out array_SABE_1KPG_Natives_MAF
 
 # pruning SNPs by LD
-plink --bfile alldatahg38_1KGP_natives_MAF --out alldatahg38_1KGP_natives_MAF_LD --indep-pairwise 50 5 0.5
+plink --bfile array_SABE_1KPG_Natives_MAF --out array_SABE_1KPG_Natives_MAF_LD --indep-pairwise 50 5 0.5
   
 # mantain pruned SNPs only and allele frequencies > 0.01
-plink --bfile alldatahg38_1KGP_natives_MAF --extract alldatahg38_1KGP_natives_MAF_LD.prune.in --make-bed --out alldatahg38_1KGP_natives_MAF_LD
+plink --bfile array_SABE_1KPG_Natives_MAF --extract array_SABE_1KPG_Natives_MAF_LD.prune.in --make-bed --out array_SABE_1KPG_Natives_MAF_LD
 
 #Relatedness among samples is analyzed by estimating the proportion of identical-by-descent (IBD) alleles between pairs of individuals by $\hat{pi}$ and relatedness matrix (GRM) estimations. In this context, it is expected that third-degree relatives have values of $\hat{pi}$ or GRM = 0.125. Therefore, pairs of samples with $\hat{pi}$ or GRM > 0.125 are removed from the data.
 # The expectation is that IBD = 1 for duplicates or monozygotic twins, IBD = 0.5 for first-degree relatives, IBD = 0.25 for second-degree relatives and IBD = 0.125 for third-degree relatives. Due to genotyping error, LD and population structure there is often some variation around these theoretical values and it is typical to remove one individual from each pair with an IBD > 0.1875, which is halfway between the expected IBD for third- and second-degree relatives. For these same reasons an IBD > 0.98 identifies duplicates.
 
 # estimates IBD from the sample by PLINK
-plink --bfile alldatahg38_1KGP_natives_MAF_LD --allow-extra-chr --allow-no-sex --genome --out alldatahg38_1KGP_natives_MAF_LD_temp
+plink --bfile array_SABE_1KPG_Natives_MAF_LD --allow-extra-chr --allow-no-sex --genome --out array_SABE_1KPG_Natives_MAF_LD_temp
 
 #Estimate Missigness
-plink --bfile alldatahg38_1KGP_natives_MAF_LD --missing --out alldatahg38_1KGP_natives_MAF_LD_temp.Miss
+plink --bfile array_SABE_1KPG_Natives_MAF_LD --missing --out array_SABE_1KPG_Natives_MAF_LD_temp.Miss
 
-cp alldatahg38_1KGP_natives_MAF_LD_temp.genome test.genome
-cp alldatahg38_1KGP_natives_MAF_LD_temp.Miss.imiss test.imiss
+cp array_SABE_1KPG_Natives_MAF_LD_temp.genome test.genome
+cp array_SABE_1KPG_Natives_MAF_LD_temp.Miss.imiss test.imiss
 
 # Run to identify all pairs of individuals with IBD > 0.125
 # change directories, if necessary, in perl script
-perl /home/thais/Pharmaco/ancestry/genome/SABE/scripts/run-IBD-QC.pl test
+perl /home/thais/Pharmaco/ancestry/arrayExome/scripts/run-IBD-QC.pl test
 
-plink --bfile alldatahg38_1KGP_natives_MAF_LD --double-id --biallelic-only strict --allow-extra-chr --allow-no-sex --remove /home/thais/Pharmaco/ancestry/array/BRA/ibd/fail-IBD-QC.txt --make-bed --out alldatahg38_1KGP_natives_MAF_LD_IBD
+plink --bfile array_SABE_1KPG_Natives_MAF_LD --double-id --biallelic-only strict --allow-extra-chr --allow-no-sex --remove /home/thais/Pharmaco/ancestry/arrayExome/ibd/fail-IBD-QC.txt --make-bed --out array_SABE_1KPG_Natives_MAF_LD_IBD
 
-plink --bfile alldatahg38_1KGP_natives_MAF_LD_IBD --double-id --biallelic-only strict --allow-extra-chr --allow-no-sex --keep 1kgp_Natives_BRA.txt --make-bed --out alldatahg38_1KGP_natives_MAF_LD_IBD_BRA
+# plink --bfile array_SABE_1KPG_Natives_MAF_LD_IBD --double-id --biallelic-only strict --allow-extra-chr --allow-no-sex --keep 1kgp_Natives_BRA.txt --make-bed --out array_SABE_1KPG_Natives_MAF_LD_IBD_BRA
 
 mv test* ibd/
-rm alldatahg38_1KGP_natives_MAF_LD_temp*
+rm array_SABE_1KPG_Natives_MAF_LD_temp*
 
+### Annotation
+plink --bfile array_SABE_1KPG_Natives_MAF_LD_IBD --double-id --allow-no-sex --biallelic-only strict --recode vcf --out array_SABE_1KPG_Natives_MAF_LD_IBD
+bgzip array_SABE_1KPG_Natives_MAF_LD_IBD.vcf
+tabix array_SABE_1KPG_Natives_MAF_LD_IBD.vcf.gz
 
 ###################################
 # 2 Haplotype phasing by SHAPEIT4
@@ -245,11 +294,12 @@ rm alldatahg38_1KGP_natives_MAF_LD_temp*
 
 # Input files
 # It's imperative to know that for shapeit we do not use the LD and IBD filters
-#plink="/home/thais/Pharmaco/ancestry/array/BRA/alldatahg38_1KGP_natives_MAF"
-plink="/home/thais/Pharmaco/ancestry/genome/SABE/alldatahg38_1KGP_natives_MAF"
+#plink="/home/thais/Pharmaco/ancestry/array/BRA/array_SABE_1KPG_Natives_MAF"
+plink="/home/thais/Pharmaco/ancestry/arrayExome/array_SABE_1KPG_Natives_MAF"
 ref="/home/thais/Pharmaco/ref/1KGP_phase3_hg38/1kGP_high_coverage_Illumina"
-mapfile="/home/thais/Pharmaco/ancestry/genome/SABE/shapeit/geneticmap"
-data="/home/thais/Pharmaco/ancestry/genome/SABE/shapeit/hg38SNP"
+mapfile="/home/thais/Pharmaco/ancestry/arrayExome/shapeit/geneticmap"
+data="/home/thais/Pharmaco/ancestry/arrayExome/shapeit/SABEBIPMed1KGPNatives_shapeit"
+
 
 # Split data by chromossome and extracting only our data from merged file
 # Create VCF files, compress and index
@@ -275,6 +325,7 @@ done
 
 # Now, we run shapeit in phasing mode (software default). We recommend to parallelize across chromosomes by screen command in the terminal console (could be for chromosomes 1 to 11 and 12 to 22).
 
+cd Pharmaco/ancestry/arrayExome/shapeit/
 # Using Shapeit4
 for chr in {1..5}; do \
    /bin/shapeit4-4.2.2/bin/shapeit4.2 \
@@ -287,6 +338,7 @@ for chr in {1..5}; do \
     --log  ${data}.chr${chr}.phased.log;
 done
 
+cd Pharmaco/ancestry/arrayExome/shapeit/
 # Using Shapeit4
 for chr in {6..12}; do \
    /bin/shapeit4-4.2.2/bin/shapeit4.2 \
@@ -299,6 +351,7 @@ for chr in {6..12}; do \
     --log  ${data}.chr${chr}.phased.log;
 done
 
+cd Pharmaco/ancestry/arrayExome/shapeit/
 # Using Shapeit4
 for chr in {13..18}; do \
    /bin/shapeit4-4.2.2/bin/shapeit4.2 \
@@ -311,6 +364,7 @@ for chr in {13..18}; do \
     --log  ${data}.chr${chr}.phased.log;
 done
 
+cd Pharmaco/ancestry/arrayExome/shapeit/
 # Using Shapeit4
 for chr in {19..22}; do \
    /bin/shapeit4-4.2.2/bin/shapeit4.2 \
@@ -345,7 +399,7 @@ bcftools query -l ${MERGE} > samplesQueryRef.txt
 grep '^0' samplesQueryRef.txt > samplesQuery.txt
 grep -v '^0' samplesQueryRef.txt > samplesREF.txt
 
-samplesQUERY=samplesQuery_BRA.txt
+samplesQUERY=samplesQuery.txt
 samplesREF=samplesREF.txt
 
 ###### Creating query VCF 
@@ -368,6 +422,7 @@ awk '{print $2"_"$1 "\t" $2}' samplefile_temp2.txt | sed 's/NAT/AMR/' > samplefi
 awk '{print $1}' samplefile_temp3.txt > samplesREF_2.txt
 
 ###### Creating reference panel VCF
+
 samplesREF=samplesREF_2.txt
 vcftools --gzvcf ${MERGE} --keep ${samplesREF} --recode --recode-INFO-all --out Ref_hg38_mergeChr
 
@@ -386,11 +441,11 @@ awk '{print $2 "\t" $1 "\t" $3}' hg38.gmap > hg38_2.gmap
 
 ################ RfMix
 
-QUERY="/home/thais/Pharmaco/ancestry/genome/SABE/shapeit/query_hg38_mergeChr.recode.vcf.gz" #VCF with all chrs
+QUERY="/home/thais/Pharmaco/ancestry/arrayExome/shapeit/query_hg38_mergeChr.recode.vcf.gz" #VCF with all chrs
 #Ref with NAT from BRA
-REF="/home/thais/Pharmaco/ancestry/array/BRA/shapeit/Ref_hg38_mergeChr.recode.vcf.gz" #VCF reference
+REF="/home/thais/Pharmaco/ancestry/arrayExome/shapeit/Ref_hg38_mergeChr.recode.vcf.gz" #VCF reference
 MAP="/home/thais/Pharmaco/ancestry/array/BRA/shapeit/geneticmap/hg38_2.gmap" #genetic map
-SAMPLE="/home/thais/Pharmaco/ancestry/array/BRA/shapeit/samplefile_temp3.txt" #sample map
+SAMPLE="/home/thais/Pharmaco/ancestry/arrayExome/shapeit/samplefile_3.txt" #sample map
 
 ## Run RfMix
 
@@ -402,7 +457,7 @@ do
 -r ${REF} \
 -m ${SAMPLE} \
 -g ${MAP} \
--o /home/thais/Pharmaco/ancestry/genome/SABE/shapeit/RFMix/BRA/BRA_allhg38SABE_rfmix_${chr} \
+-o /home/thais/Pharmaco/ancestry/arrayExome/shapeit/RFMIx/BRA_allhg38SABE_rfmix_${chr} \
 --n-threads=12 \
 --chromosome=${chr}
 done
@@ -416,7 +471,7 @@ do
 -m ${SAMPLE} \
 -g ${MAP} \
 -o /home/thais/Pharmaco/ancestry/genome/SABE/shapeit/RFMix/BRA_RR/BRA_allhg38SABE_rfmix_RR_${chr} \
---n-threads=12 \
+--n-threads=4 \
 --chromosome=${chr} \
 --reanalyze-reference
 done

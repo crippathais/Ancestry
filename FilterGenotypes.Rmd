@@ -39,7 +39,7 @@ res <- sapply(pkgs, require, character.only=TRUE)
 
 Configure the paste that all data and results will be available 
 ```{r set.directory}
-setwd("/home/thais/Postdoc/GitHub/ancestry/")
+setwd("/home/thais/Pharmaco/ancestry/arrayExome/")
 ```
 
 
@@ -92,7 +92,7 @@ write.table(as.matrix(ambiguous.SNPs$V2),file='ambiguous_var.txt',quote=F,row.na
 
 ``` {r}
 # do genotype filtering
-system(paste0('plink --bfile ',prefixname,' --autosome  --hwe 0.000001 --geno 0.1 --mind 0.21  --exclude ambiguous_var.txt --allow-extra-chr --make-bed --out',prefixname,'_QC'))
+system(paste0('plink --bfile ',prefixfile,' --autosome  --hwe 0.000001 --geno 0.1 --mind 0.21  --exclude ambiguous_var.txt --allow-extra-chr --make-bed --out ',prefixfile,'_QC'))
 
 ```
 
