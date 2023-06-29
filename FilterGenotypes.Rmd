@@ -98,7 +98,8 @@ system(paste0('plink --bfile ',prefixfile,' --autosome  --hwe 0.000001 --geno 0.
 
 
 # Filtering by Samples
-We evaluate the heterozygosity rate (amount of heterozygous SNPs in the genome) for each sample, in order to search for endogamic sample (Low heterozygosity rates), or technical problems, such as sample contamination (high heterozygosity rate). In this case, we remove sample who presented heterozigosity rate with more or less than three standard deviations from the mean.
+We evaluate the heterozygosity rate (amount of heterozygous SNPs in the genome) for each sample, in order to search for endogamic sample (Low heterozygosity rates), or technical problems, such as sample contamination (high heterozygosity rate). In this case, 
+we remove sample who presented heterozigosity rate with more or less than three standard deviations from the mean.
 
 ```{r}
 prefixname<-"hg38_QC"

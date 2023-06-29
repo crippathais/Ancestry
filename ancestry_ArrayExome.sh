@@ -424,11 +424,13 @@ awk '{print $1}' samplefile_temp3.txt > samplesREF_2.txt
 ###### Creating reference panel VCF
 
 samplesREF=samplesREF_2.txt
-vcftools --gzvcf ${MERGE} --keep ${samplesREF} --recode --recode-INFO-all --out Ref_hg38_mergeChr
+samplesREF=PER_samplesREF_2.txt
+
+vcftools --gzvcf ${MERGE} --keep ${samplesREF} --recode --recode-INFO-all --out PER_Ref_hg38_mergeChr
 
 #Compress and index
-bgzip Ref_hg38_mergeChr.recode.vcf
-bcftools index Ref_hg38_mergeChr.recode.vcf.gz
+bgzip PER_Ref_hg38_mergeChr.recode.vcf
+bcftools index PER_Ref_hg38_mergeChr.recode.vcf.gz
 
 ################ Gene map file
 # Creating map file: VCF with all chromossomes -- indexed with bcftools
@@ -444,7 +446,7 @@ awk '{print $2 "\t" $1 "\t" $3}' hg38.gmap > hg38_2.gmap
 QUERY="/home/thais/Pharmaco/ancestry/arrayExome/shapeit/query_hg38_mergeChr.recode.vcf.gz" #VCF with all chrs
 #Ref with NAT from BRA
 REF="/home/thais/Pharmaco/ancestry/arrayExome/shapeit/Ref_hg38_mergeChr.recode.vcf.gz" #VCF reference
-MAP="/home/thais/Pharmaco/ancestry/array/BRA/shapeit/geneticmap/hg38_2.gmap" #genetic map
+MAP="/home/thais/Pharmaco/ancestry/arrayExome/shapeit/geneticmap/hg38_2.gmap" #genetic map
 SAMPLE="/home/thais/Pharmaco/ancestry/arrayExome/shapeit/samplefile_3.txt" #sample map
 
 ## Run RfMix
@@ -458,7 +460,7 @@ do
 -m ${SAMPLE} \
 -g ${MAP} \
 -o /home/thais/Pharmaco/ancestry/arrayExome/shapeit/RFMIx/BRA_allhg38SABE_rfmix_${chr} \
---n-threads=12 \
+--n-threads=6 \
 --chromosome=${chr}
 done
 
@@ -470,19 +472,27 @@ do
 -r ${REF} \
 -m ${SAMPLE} \
 -g ${MAP} \
--o /home/thais/Pharmaco/ancestry/genome/SABE/shapeit/RFMix/BRA_RR/BRA_allhg38SABE_rfmix_RR_${chr} \
---n-threads=4 \
+-o /home/thais/Pharmaco/ancestry/genome/SABE/shapeit/RFMix/NAT_Trim/BRA_allhg38SABE_rfmix_RR_NAT_trim_${chr} \
+--n-threads=12 \
 --chromosome=${chr} \
 --reanalyze-reference
 done
 
+
+# # # # # # # #  NAT_PER
 #VCF with all chrs
-#QUERY="/home/thais/Pharmaco/ancestry/array/BRA/shapeit/query_hg38_mergeChr.recode.vcf.gz" 
-QUERY="/home/thais/Pharmaco/ancestry/genome/SABE/shapeit/query_hg38_mergeChr.recode.vcf.gz"
+QUERY="/home/thais/Pharmaco/ancestry/arrayExome/shapeit/query_hg38_mergeChr.recode.vcf.gz" #VCF with all chrs
 #Ref with NAT from PER
-REF="/home/thais/Pharmaco/ancestry/array/PER/shapeit/Ref_hg38_mergeChr.recode.vcf.gz" #VCF reference
-MAP="/home/thais/Pharmaco/ancestry/array/BRA/shapeit/geneticmap/hg38_2.gmap" #genetic map
-SAMPLE="/home/thais/Pharmaco/ancestry/array/PER/shapeit/samplefile_temp3.txt" #sample map
+REF="/home/thais/Pharmaco/ancestry/arrayExome/shapeit/PER_Ref_hg38_mergeChr.recode.vcf.gz" #VCF reference
+MAP="/home/thais/Pharmaco/ancestry/array/arrayExome/shapeit/geneticmap/hg38_2.gmap" #genetic map
+SAMPLE="/home/thais/Pharmaco/ancestry/arrayExome/shapeit/PER_samplefile_3.txt" #sample map
+
+# #QUERY="/home/thais/Pharmaco/ancestry/array/BRA/shapeit/query_hg38_mergeChr.recode.vcf.gz" 
+# QUERY="/home/thais/Pharmaco/ancestry/genome/SABE/shapeit/query_hg38_mergeChr.recode.vcf.gz"
+# #Ref with NAT from PER
+# REF="/home/thais/Pharmaco/ancestry/array/PER/shapeit/Ref_hg38_mergeChr.recode.vcf.gz" #VCF reference
+# MAP="/home/thais/Pharmaco/ancestry/array/BRA/shapeit/geneticmap/hg38_2.gmap" #genetic map
+# SAMPLE="/home/thais/Pharmaco/ancestry/array/PER/shapeit/samplefile_temp3.txt" #sample map
 
 
 ### PER
@@ -493,7 +503,7 @@ do
 -r ${REF} \
 -m ${SAMPLE} \
 -g ${MAP} \
--o /home/thais/Pharmaco/ancestry/genome/SABE/shapeit/RFMix/PER/PER_allhg38SABE_rfmix_${chr} \
+-o /home/thais/Pharmaco/ancestry/arrayExome/shapeit/RFMIx/NAT_PER/PER_allhg38SABE_rfmix_${chr} \
 --n-threads=12 \
 --chromosome=${chr}
 done
@@ -513,61 +523,61 @@ do
 --reanalyze-reference
 done
 
-for m in BRA PER
+for m in BRA
 do
-grep "#" ${m}_allhg38_rfmix_1.sis.tsv > header.sis.tsv
-cat ${m}_allhg38_rfmix_*.sis.tsv | grep -v "#" > ${m}_allhg38_rfmix_total.sis.tsv
-cat header.sis.tsv ${m}_allhg38_rfmix_total.sis.tsv | sort -k1 -n > ${m}_allhg38_rfmix_total_h.sis.tsv
+grep "#" ${m}_allhg38SABE_rfmix_1.sis.tsv > header.sis.tsv
+cat ${m}_allhg38SABE_rfmix_*.sis.tsv | grep -v "#" > ${m}_allhg38SABE_rfmix_total.sis.tsv
+cat header.sis.tsv ${m}_allhg38SABE_rfmix_total.sis.tsv | sort -k1 -n > ${m}_allhg38SABE_rfmix_total_h.sis.tsv
 
-awk 'NR==2' ${m}_allhg38_rfmix_1.fb.tsv > header.fb.tsv
-cat ${m}_allhg38_rfmix_*.fb.tsv | grep -v "chromosome" | grep -v "#" > ${m}_allhg38_rfmix_total.fb.tsv
-cat header.fb.tsv ${m}_allhg38_rfmix_total.fb.tsv | sort -k1 -n > ${m}_allhg38_rfmix_total_h.fb.tsv
+awk 'NR==2' ${m}_allhg38SABE_rfmix_1.fb.tsv > header.fb.tsv
+cat ${m}_allhg38SABE_rfmix_*.fb.tsv | grep -v "chromosome" | grep -v "#" > ${m}_allhg38SABE_rfmix_total.fb.tsv
+cat header.fb.tsv ${m}_allhg38SABE_rfmix_total.fb.tsv | sort -k1 -n > ${m}_allhg38SABE_rfmix_total_h.fb.tsv
 
-grep "#" ${m}_allhg38_rfmix_1.msp.tsv > header.msp.tsv
-cat ${m}_allhg38_rfmix_*.msp.tsv | grep -v "#" > ${m}_allhg38_rfmix_total.msp.tsv
-cat header.msp.tsv ${m}_allhg38_rfmix_total.msp.tsv | sort -k1 -n > ${m}_allhg38_rfmix_total_h.msp.tsv
+grep "#" ${m}_allhg38SABE_rfmix_1.msp.tsv > header.msp.tsv
+cat ${m}_allhg38SABE_rfmix_*.msp.tsv | grep -v "#" > ${m}_allhg38SABE_rfmix_total.msp.tsv
+cat header.msp.tsv ${m}_allhg38SABE_rfmix_total.msp.tsv | sort -k1 -n > ${m}_allhg38SABE_rfmix_total_h.msp.tsv
 
-grep "#" ${m}_allhg38_rfmix_1.rfmix.Q > header.rfmix.Q
-cat ${m}_allhg38_rfmix_*.rfmix.Q | grep -v "#" > ${m}_allhg38_rfmix_total.rfmix.Q
-cat header.rfmix.Q ${m}_allhg38_rfmix_total.rfmix.Q | sort -k1 -n  > ${m}_allhg38_rfmix_total_h.rfmix.Q
+grep "#" ${m}_allhg38SABE_rfmix_1.rfmix.Q > header.rfmix.Q
+cat ${m}_allhg38SABE_rfmix_*.rfmix.Q | grep -v "#" > ${m}_allhg38SABE_rfmix_total.rfmix.Q
+cat header.rfmix.Q ${m}_allhg38SABE_rfmix_total.rfmix.Q | sort -k1 -n  > ${m}_allhg38SABE_rfmix_total_h.rfmix.Q
 done
 
 ### BRA_RR
 
-grep "#" BRA_allhg38_rfmix_RR_1.sis.tsv > header.sis.tsv
-cat BRA_allhg38_rfmix_RR_*.sis.tsv | grep -v "#" > BRA_allhg38_rfmix_RR_total.sis.tsv
-cat header.sis.tsv BRA_allhg38_rfmix_RR_total.sis.tsv | sort -k1 -n > BRA_allhg38_rfmix_RR_total_h.sis.tsv
+grep "#" BRA_allhg38SABE_rfmix_RR_NAT_trim_1.sis.tsv > header.sis.tsv
+cat BRA_allhg38SABE_rfmix_RR_NAT_trim_*.sis.tsv | grep -v "#" > BRA_allhg38SABE_rfmix_RR_NAT_trim_total.sis.tsv
+cat header.sis.tsv BRA_allhg38SABE_rfmix_RR_NAT_trim_total.sis.tsv | sort -k1 -n > BRA_allhg38SABE_rfmix_RR_NAT_trim_total_h.sis.tsv
 
-awk 'NR==2' BRA_allhg38_rfmix_RR_1.fb.tsv > header.fb.tsv
-cat BRA_allhg38_rfmix_RR_*.fb.tsv | grep -v "chromosome" | grep -v "#" > BRA_allhg38_rfmix_RR_total.fb.tsv
-cat header.fb.tsv BRA_allhg38_rfmix_RR_total.fb.tsv | sort -k1 -n > BRA_allhg38_rfmix_RR_total_h.fb.tsv
+awk 'NR==2' BRA_allhg38SABE_rfmix_RR_NAT_trim_1.fb.tsv > header.fb.tsv
+cat BRA_allhg38SABE_rfmix_RR_NAT_trim_*.fb.tsv | grep -v "chromosome" | grep -v "#" > BRA_allhg38SABE_rfmix_RR_NAT_trim_total.fb.tsv
+cat header.fb.tsv BRA_allhg38SABE_rfmix_RR_NAT_trim_total.fb.tsv | sort -k1 -n > BRA_allhg38SABE_rfmix_RR_NAT_trim_total_h.fb.tsv
 
-grep "#" BRA_allhg38_rfmix_RR_1.msp.tsv > header.msp.tsv
-cat BRA_allhg38_rfmix_RR_*.msp.tsv | grep -v "#" > BRA_allhg38_rfmix_RR_total.msp.tsv
-cat header.msp.tsv BRA_allhg38_rfmix_RR_total.msp.tsv | sort -k1 -n > BRA_allhg38_rfmix_RR_total_h.msp.tsv
+grep "#" BRA_allhg38SABE_rfmix_RR_NAT_trim_1.msp.tsv > header.msp.tsv
+cat BRA_allhg38SABE_rfmix_RR_NAT_trim_*.msp.tsv | grep -v "#" > BRA_allhg38SABE_rfmix_RR_NAT_trim_total.msp.tsv
+cat header.msp.tsv BRA_allhg38SABE_rfmix_RR_NAT_trim_total.msp.tsv | sort -k1 -n > BRA_allhg38SABE_rfmix_RR_NAT_trim_total_h.msp.tsv
 
-grep "#" BRA_allhg38_rfmix_RR_1.rfmix.Q > header.rfmix.Q
-cat BRA_allhg38_rfmix_RR_*.rfmix.Q | grep -v "#" > BRA_allhg38_rfmix_RR_total.rfmix.Q
-cat header.rfmix.Q BRA_allhg38_rfmix_RR_total.rfmix.Q | sort -k1 -n  > BRA_allhg38_rfmix_RR_total_h.rfmix.Q
+grep "#" BRA_allhg38SABE_rfmix_RR_NAT_trim_1.rfmix.Q > header.rfmix.Q
+cat BRA_allhg38SABE_rfmix_RR_NAT_trim_*.rfmix.Q | grep -v "#" > BRA_allhg38SABE_rfmix_RR_NAT_trim_total.rfmix.Q
+cat header.rfmix.Q BRA_allhg38SABE_rfmix_RR_NAT_trim_total.rfmix.Q | sort -k1 -n  > BRA_allhg38SABE_rfmix_RR_NAT_trim_total_h.rfmix.Q
 
 
 
 ##PER
-grep "#" PER_allhg38_rfmix_1.sis.tsv > header.sis.tsv
-cat PER_allhg38_rfmix_*.sis.tsv | grep -v "#" > PER_allhg38_rfmix_total.sis.tsv
-cat header.sis.tsv PER_allhg38_rfmix_total.sis.tsv | sort -k1 -n > PER_allhg38_rfmix_total_h.sis.tsv
+awk 'NR==2' PER_allhg38SABE_rfmix_1.fb.tsv > header.fb.tsv
+cat PER_allhg38SABE_rfmix_*.fb.tsv | grep -v "chromosome" | grep -v "#" > PER_allhg38SABE_rfmix_total.fb.tsv
+cat header.fb.tsv PER_allhg38SABE_rfmix_total.fb.tsv | sort -k1 -n > PER_allhg38SABE_rfmix_total_h.fb.tsv
 
-awk 'NR==2' PER_allhg38_rfmix_1.fb.tsv > header.fb.tsv
-cat PER_allhg38_rfmix_*.fb.tsv | grep -v "chromosome" | grep -v "#" > PER_allhg38_rfmix_total.fb.tsv
-cat header.fb.tsv PER_allhg38_rfmix_total.fb.tsv | sort -k1 -n > PER_allhg38_rfmix_total_h.fb.tsv
+grep "#" PER_allhg38SABE_rfmix_1.sis.tsv > header.sis.tsv
+cat PER_allhg38SABE_rfmix_*.sis.tsv | grep -v "#" > PER_allhg38SABE_rfmix_total.sis.tsv
+cat header.sis.tsv PER_allhg38SABE_rfmix_total.sis.tsv | sort -k1 -n > PER_allhg38SABE_rfmix_total_h.sis.tsv
 
-grep "#" PER_allhg38_rfmix_1.msp.tsv > header.msp.tsv
-cat PER_allhg38_rfmix_*.msp.tsv | grep -v "#" > PER_allhg38_rfmix_total.msp.tsv
-cat header.msp.tsv PER_allhg38_rfmix_total.msp.tsv | sort -k1 -n > PER_allhg38_rfmix_total_h.msp.tsv
+grep "#" PER_allhg38SABE_rfmix_1.msp.tsv > header.msp.tsv
+cat PER_allhg38SABE_rfmix_*.msp.tsv | grep -v "#" > PER_allhg38SABE_rfmix_total.msp.tsv
+cat header.msp.tsv PER_allhg38SABE_rfmix_total.msp.tsv | sort -k1 -n > PER_allhg38SABE_rfmix_total_h.msp.tsv
 
-grep "#" PER_allhg38_rfmix_1.rfmix.Q > header.rfmix.Q
-cat PER_allhg38_rfmix_*.rfmix.Q | grep -v "#" > PER_allhg38_rfmix_total.rfmix.Q
-cat header.rfmix.Q PER_allhg38_rfmix_total.rfmix.Q | sort -k1 -n  > PER_allhg38_rfmix_total_h.rfmix.Q
+grep "#" PER_allhg38SABE_rfmix_1.rfmix.Q > header.rfmix.Q
+cat PER_allhg38SABE_rfmix_*.rfmix.Q | grep -v "#" > PER_allhg38SABE_rfmix_total.rfmix.Q
+cat header.rfmix.Q PER_allhg38SABE_rfmix_total.rfmix.Q | sort -k1 -n  > PER_allhg38SABE_rfmix_total_h.rfmix.Q
 
 ### PER_RR
 
